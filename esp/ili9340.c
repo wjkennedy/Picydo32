@@ -30,7 +30,7 @@ static const int SPI_Command_Mode = 0;
 static const int SPI_Data_Mode = 1;
 //static const int TFT_Frequency = SPI_MASTER_FREQ_20M;
 ////static const int TFT_Frequency = SPI_MASTER_FREQ_26M;
-static const int TFT_Frequency = SPI_MASTER_FREQ_40M;
+static const int TFT_Frequency = 55000000;
 ////static const int TFT_Frequency = SPI_MASTER_FREQ_80M;
 
 void spi_master_init(TFT_t * dev, gpio_num_t GPIO_MOSI, gpio_num_t GPIO_SCLK, gpio_num_t TFT_CS, gpio_num_t GPIO_DC, gpio_num_t GPIO_RESET, gpio_num_t GPIO_BL)
@@ -188,6 +188,40 @@ void lcdInit(TFT_t * dev, uint16_t model, int width, int height, int offsetx, in
 			ESP_LOGI(TAG,"Your TFT is ST7735");
 		ESP_LOGI(TAG,"Screen width:%d",width);
 		ESP_LOGI(TAG,"Screen height:%d",height);
+
+		// Standard ILI9341 power-up sequence. The previous sequence was the
+		// abbreviated ST7735 path and left CYD panels only partially configured.
+		spi_master_write_comm_byte(dev, 0x01); // software reset
+		delayMS(5);
+		spi_master_write_comm_byte(dev, 0xEF);
+		spi_master_write_data_byte(dev, 0x03);
+		spi_master_write_data_byte(dev, 0x80);
+		spi_master_write_data_byte(dev, 0x02);
+		spi_master_write_comm_byte(dev, 0xCF);
+		spi_master_write_data_byte(dev, 0x00);
+		spi_master_write_data_byte(dev, 0xC1);
+		spi_master_write_data_byte(dev, 0x30);
+		spi_master_write_comm_byte(dev, 0xED);
+		spi_master_write_data_byte(dev, 0x64);
+		spi_master_write_data_byte(dev, 0x03);
+		spi_master_write_data_byte(dev, 0x12);
+		spi_master_write_data_byte(dev, 0x81);
+		spi_master_write_comm_byte(dev, 0xE8);
+		spi_master_write_data_byte(dev, 0x85);
+		spi_master_write_data_byte(dev, 0x00);
+		spi_master_write_data_byte(dev, 0x78);
+		spi_master_write_comm_byte(dev, 0xCB);
+		spi_master_write_data_byte(dev, 0x39);
+		spi_master_write_data_byte(dev, 0x2C);
+		spi_master_write_data_byte(dev, 0x00);
+		spi_master_write_data_byte(dev, 0x34);
+		spi_master_write_data_byte(dev, 0x02);
+		spi_master_write_comm_byte(dev, 0xF7);
+		spi_master_write_data_byte(dev, 0x20);
+		spi_master_write_comm_byte(dev, 0xEA);
+		spi_master_write_data_byte(dev, 0x00);
+		spi_master_write_data_byte(dev, 0x00);
+
 		spi_master_write_comm_byte(dev, 0xC0);	//Power Control 1
 		spi_master_write_data_byte(dev, 0x23);
 
@@ -205,7 +239,7 @@ void lcdInit(TFT_t * dev, uint16_t model, int width, int height, int offsetx, in
         // change from 0x08 to 0x00
 
         //spi_master_write_data_byte(dev, 0x00 | 0x40 | 0x20) ; // | 0x40 | 0x20);	//Right top start, BGR color filter panel
-		spi_master_write_data_byte(dev, 0x00) ; // | 0x40 | 0x20);	//Right top start, BGR color filter panel
+		spi_master_write_data_byte(dev, 0x48); // portrait orientation, BGR
 		//spi_master_write_data_byte(dev, 0x00);//Right top start, RGB color filter panel
         // 0x40 0x20 are rotate 2x?
 
@@ -220,9 +254,8 @@ void lcdInit(TFT_t * dev, uint16_t model, int width, int height, int offsetx, in
 
 		spi_master_write_comm_byte(dev, 0xB6);	//Display Function Control
 		spi_master_write_data_byte(dev, 0x08);
-		spi_master_write_data_byte(dev, 0xA2);	// REV:1 GS:0 SS:0 SM:0
+		spi_master_write_data_byte(dev, 0x82);	// REV:1 GS:0 SS:0 SM:0
 		spi_master_write_data_byte(dev, 0x27);
-		spi_master_write_data_byte(dev, 0x00);
 
         // {0x02, 0x1C, 0x07, 0x12, 0x37, 0x32, 0x29, 0x2D, 0x29, 0x25, 0x2B, 0x39, 0x00, 0x01, 0x03, 0x10 }},
 		spi_master_write_comm_byte(dev, 0xE0);	//Positive Gamma Correction
@@ -263,10 +296,16 @@ void lcdInit(TFT_t * dev, uint16_t model, int width, int height, int offsetx, in
 		spi_master_write_data_byte(dev, 0x10);
 
 
+		spi_master_write_comm_byte(dev, 0xF2);
+		spi_master_write_data_byte(dev, 0x00);
+		spi_master_write_comm_byte(dev, 0x26);
+		spi_master_write_data_byte(dev, 0x01);
+
 		spi_master_write_comm_byte(dev, 0x11);	//Sleep Out
-		delayMS(10);
+		delayMS(120);
 
 		spi_master_write_comm_byte(dev, 0x29);	//Display ON
+		delayMS(20);
 	}
 
 
@@ -276,25 +315,23 @@ void lcdInit(TFT_t * dev, uint16_t model, int width, int height, int offsetx, in
 
     printf("setting largert window\n");
     // https://stackoverflow.com/a/45622027
-    // display is actually 132 x 132
-
-    // blank entire window
+    // Blank the configured panel after initialization.
     spi_master_write_comm_byte(dev, 0x2A);	// set column(x) address
     spi_master_write_data_word(dev, 0);
-    spi_master_write_data_word(dev, 128);
+    spi_master_write_data_word(dev, width - 1);
 
     spi_master_write_comm_byte(dev, 0x2B);	// set Page(y) address
     spi_master_write_data_word(dev, 0);
-    spi_master_write_data_word(dev, 160);
+    spi_master_write_data_word(dev, height - 1);
 
 
     // blank screen
-    uint8_t buffer[160*2];
+    uint8_t buffer[CONFIG_TFT_WIDTH * 2];
     memset(buffer, 0x0, sizeof(buffer));
     gpio_set_level(dev->_dc, SPI_Command_Mode);
     spi_master_write_comm_byte(dev, 0x2C);	//	Memory Write
     gpio_set_level(dev->_dc, SPI_Data_Mode);
-    for(uint8_t y=0; y<128; y++) {
+    for(uint16_t y=0; y<height; y++) {
         spi_master_write_byte(dev->_TFT_Handle, buffer, sizeof(buffer));
     }
 
@@ -303,11 +340,11 @@ void lcdInit(TFT_t * dev, uint16_t model, int width, int height, int offsetx, in
 void set_window_hud(TFT_t* dev, uint8_t width, uint8_t height) {
     spi_master_write_comm_byte(dev, 0x2A);	// set column(x) address
     spi_master_write_data_word(dev, 0);
-    spi_master_write_data_word(dev, width);
+    spi_master_write_data_word(dev, width - 1);
 
     spi_master_write_comm_byte(dev, 0x2B);	// set Page(y) address
     spi_master_write_data_word(dev, 4); // 4 = offset/padding
-    spi_master_write_data_word(dev, 4+height);
+    spi_master_write_data_word(dev, 4 + height - 1);
 }
 
 void set_window(TFT_t* dev) {
@@ -320,7 +357,41 @@ void set_window(TFT_t* dev) {
 
     spi_master_write_comm_byte(dev, 0x2B);	// set Page(y) address
     spi_master_write_data_word(dev, 16);
-    spi_master_write_data_word(dev, 32+127);
+    spi_master_write_data_word(dev, 16 + 127);
+}
+
+void lcdDrawFillRect(TFT_t *dev, uint16_t x1, uint16_t y1,
+                     uint16_t x2, uint16_t y2, uint16_t color)
+{
+    if (x1 > x2 || y1 > y2 || x2 >= CONFIG_TFT_WIDTH || y2 >= CONFIG_TFT_HEIGHT)
+        return;
+
+    uint8_t row[(x2 - x1 + 1) * 2];
+    for (uint16_t x = 0; x <= x2 - x1; x++) {
+        row[x * 2] = color >> 8;
+        row[x * 2 + 1] = color & 0xff;
+    }
+
+    spi_master_write_comm_byte(dev, 0x2A);
+    spi_master_write_data_word(dev, x1);
+    spi_master_write_data_word(dev, x2);
+    spi_master_write_comm_byte(dev, 0x2B);
+    spi_master_write_data_word(dev, y1);
+    spi_master_write_data_word(dev, y2);
+    spi_master_write_comm_byte(dev, 0x2C);
+    for (uint16_t y = y1; y <= y2; y++)
+        spi_master_write_byte(dev->_TFT_Handle, row, sizeof(row));
+}
+
+void lcdSetWindowRect(TFT_t *dev, uint16_t x1, uint16_t y1,
+                      uint16_t x2, uint16_t y2)
+{
+    spi_master_write_comm_byte(dev, 0x2A);
+    spi_master_write_data_word(dev, x1);
+    spi_master_write_data_word(dev, x2);
+    spi_master_write_comm_byte(dev, 0x2B);
+    spi_master_write_data_word(dev, y1);
+    spi_master_write_data_word(dev, y2);
 }
 
 // Display ON

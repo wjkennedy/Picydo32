@@ -3,9 +3,13 @@
 #include "data.h"
 #include "engine.h"
 #include "parser.c"
+#ifndef PICO8_DISABLE_AUDIO
 #include "synth.c"
+#endif
 #include "hud.c"
+#ifndef PICO8_DISABLE_AUDIO
 #include "sfx.c"
+#endif
 #include "pico8api.c"
 #include "lua/lauxlib.h"
 #include "lua/lualib.h"
@@ -82,8 +86,8 @@ void engine_init() {
 
     memset(cartdata, 0, sizeof(cartdata));
 
+#ifndef PICO8_DISABLE_AUDIO
     memset(audiobuf, 0, sizeof(audiobuf));
-
     channels[0].id = 0;
     channels[1].id = 1;
     channels[2].id = 2;
@@ -93,14 +97,18 @@ void engine_init() {
     channels[1].sfx = NULL;
     channels[2].sfx = NULL;
     channels[3].sfx = NULL;
+#endif
 
     printf("Parsing font \n");
     assert(artifacts_font_lua_len <= sizeof(fontsheet.sprite_data));
     memcpy(fontsheet.sprite_data, artifacts_font_lua, artifacts_font_lua_len);
 
     printf("Parsing HUD \n");
-    assert(artifacts_hud_p8_len <= sizeof(hud_sprites.sprite_data));
-    memcpy(hud_sprites.sprite_data, artifacts_hud_p8, artifacts_hud_p8_len);
+    assert(artifacts_hud_p8_len >= 128 * 15);
+    memset(hud_sprites, 0, sizeof(hud_sprites));
+    for (uint8_t y = 0; y < 15; y++) {
+        memcpy(&hud_sprites[y * 32], &artifacts_hud_p8[y * 128], 32);
+    }
 //    init_pink_noise_gen(&osc);
 }
 
@@ -120,9 +128,11 @@ void cartParser(const GameCart* parsingCart) {
                 mapParser(parsingCart->gfx+(i*256), i, map_data);
             }
         }
+#ifndef PICO8_DISABLE_AUDIO
         for(uint8_t i=0; i<(parsingCart->sfx_len/168); i++) {
                 SFXParser(parsingCart->sfx+(i*168), i, sfx);
         }
+#endif
 }
 void registerLuaFunctions() {
     lua_pushcfunction(L, _lua_spr);
@@ -253,4 +263,3 @@ void flip() {
     frame_end_time = frame_start_time + ms_delay;
 }
 #endif
-

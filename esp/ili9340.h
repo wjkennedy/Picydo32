@@ -62,6 +62,7 @@ void lcdInit(TFT_t * dev, uint16_t model, int width, int height, int offsetx, in
 void lcdDrawPixel(TFT_t * dev, uint16_t x, uint16_t y, uint16_t color);
 void lcdDrawMultiPixels(TFT_t * dev, uint16_t x, uint16_t y, uint16_t size, uint16_t * colors);
 void lcdDrawFillRect(TFT_t * dev, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t color);
+void lcdSetWindowRect(TFT_t * dev, uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2);
 void lcdDisplayOff(TFT_t * dev);
 void lcdDisplayOn(TFT_t * dev);
 void lcdInversionOff(TFT_t * dev);
@@ -91,4 +92,3 @@ void lcdScroll(TFT_t * dev, uint16_t vsp);
 int xptGetit(TFT_t * dev, int cmd);
 void xptGetxy(TFT_t * dev, int *xp, int *yp);
 #endif /* MAIN_ILI9340_H_ */
-

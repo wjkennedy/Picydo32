@@ -1,5 +1,30 @@
 menu "PicoPico Configuration"
-        # GPIO34-39 can only be set as input mode and do not have software-enabled pullup or pulldown functions.
+	config BLUETOOTH_GAMEPAD
+		bool "Generic Bluetooth Classic HID gamepad"
+		default n
+		help
+			Enable the generic Bluetooth HID host. This consumes substantial
+			internal DRAM on the original ESP32; leave disabled until the
+			WiFi/web configuration path is trimmed or made exclusive.
+
+	config WIFI_SSID
+		string "WiFi station SSID"
+		default ""
+		help
+			SSID used for the M2 station connection. Leave empty to disable WiFi.
+
+	config WIFI_PASSWORD
+		string "WiFi station password"
+		default ""
+		help
+			Password for the configured WiFi station.
+
+	config WIFI_CONNECT_TIMEOUT_MS
+		int "WiFi connection timeout (ms)"
+		range 1000 120000
+		default 15000
+
+	# GPIO34-39 can only be set as input mode and do not have software-enabled pullup or pulldown functions.
 	config WIDTH
 		int "SCREEN WIDTH"
 		range 0 999
@@ -86,7 +111,13 @@ menu "PicoPico Configuration"
 				GPIO number (IOxx) for DATA OUT. Connects to the Audio board on DATA IN. Not on SD, which means SHUTDOWN.
 	endmenu
 
-	menu "ST7789 Configuration"
+	menu "TFT Display Configuration"
+
+		config TFT_CONTROLLER_ILI9341
+			bool "Use ILI9341 controller (CYD)"
+			default y
+			help
+				Enable the ILI9341 profile used by the ESP32-2432S024 CYD.
 
 		config OFFSETX
 			int "GRAM X OFFSET"
@@ -101,6 +132,21 @@ menu "PicoPico Configuration"
 			default 0
 			help
 				When your TFT have offset(Y), set it.
+
+		config TFT_WIDTH
+			int "TFT panel width"
+			range 1 480
+			default 240
+
+		config TFT_HEIGHT
+			int "TFT panel height"
+			range 1 480
+			default 320
+
+		config TFT_MISO
+			int "TFT MISO GPIO number"
+			range -1 40
+			default 12
 	
 		config MOSI_GPIO
 			int "MOSI GPIO number"
@@ -145,7 +191,7 @@ menu "PicoPico Configuration"
 	
 		config RESET_GPIO
 			int "RESET GPIO number"
-			range 0 40
+			range -1 40
 			default 19
 			help
 				GPIO number (IOxx) to RESET.

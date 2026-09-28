@@ -818,6 +818,7 @@ int _lua_stat(lua_State* L) {
     if (n >=16 && n<=26) // 16..26 == 46..56
         n += 30;
     switch(n) {
+#ifndef PICO8_DISABLE_AUDIO
         case 49: // 19 also -- sfx id
             if (channels[3].sfx == NULL) {
                 lua_pushinteger(L, -1);
@@ -833,6 +834,7 @@ int _lua_stat(lua_State* L) {
                 lua_pushinteger(L, note_id);
             }
             break;
+#endif
         case 102: // bbs information: domain if web; 0 for local
             lua_pushinteger(L, 0);
             break;
@@ -844,6 +846,12 @@ int _lua_stat(lua_State* L) {
 }
 
 int _lua_sfx(lua_State* L) {
+#ifdef PICO8_DISABLE_AUDIO
+    // Audio is intentionally unavailable on the ESP32 bring-up target.
+    // Keep this function registered so carts do not fail at load time.
+    (void)L;
+    return 0;
+#else
     int16_t n       = luaL_optinteger(L, 1, -1);
     int16_t channel = luaL_optinteger(L, 2, -1);
     int16_t offset  = luaL_optinteger(L, 3, 0);
@@ -877,6 +885,7 @@ int _lua_sfx(lua_State* L) {
     channels[channel].phi       = 0;
 
     return 0;
+#endif
 }
 int _lua_stub(lua_State* L) {
 	// TODO: implement
@@ -1125,7 +1134,8 @@ inline void render(Spritesheet* s, uint16_t n, uint16_t x0, uint16_t y0, int pal
     const uint8_t sprite_count = 16;
     const uint8_t xIndex = n % sprite_count;
     const uint8_t yIndex = n / sprite_count;
-    _render(s, xIndex*8, yIndex*8, x0, y0, paletteIdx, flip_x, flip_y, 1, 1);
+    _render(s, xIndex*8, yIndex*8, x0, y0, paletteIdx, flip_x, flip_y,
+            z8::fix32(1.0f), z8::fix32(1.0f));
 }
 
 void render_stretched(Spritesheet* s, uint16_t sx, uint16_t sy, uint16_t sw, uint16_t sh, uint16_t dx, uint16_t dy,
