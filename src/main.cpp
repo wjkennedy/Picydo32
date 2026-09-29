@@ -16,6 +16,13 @@
 #include "3ds_backend.cpp"
 #endif
 
+#if defined(ESP_BACKEND)
+extern const GameCart *sd_selected_cart;
+extern bool sd_cart_load_index(uint16_t index);
+extern uint16_t sd_cart_count(void);
+extern const char *sd_cart_name(uint16_t index);
+#endif
+
 
 int16_t drawMenu() {
     int8_t highlighted = 0;
@@ -66,6 +73,49 @@ int16_t drawMenu() {
     return -1;
 }
 
+#if defined(ESP_BACKEND)
+static int16_t drawSdMenu() {
+    const uint16_t count = sd_cart_count();
+    uint16_t highlighted = 0;
+    bool changed = true;
+    while (!wants_to_quit) {
+        if (buttons_frame[BTN_IDX_DOWN]) {
+            if (count) highlighted = (highlighted + 1) % count;
+            changed = true;
+        }
+        if (buttons_frame[BTN_IDX_UP]) {
+            if (count) highlighted = highlighted ? highlighted - 1 : count - 1;
+            changed = true;
+        }
+        if (changed) {
+            gfx_cls(original_palette[0]);
+            drawHud();
+            _print("SD CARTS", 8, 8, 8, 7);
+            if (!count) {
+                _print("NO CARTS", 8, 52, 56, 8);
+                _print("INSERT SD CARD", 14, 20, 72, 7);
+            }
+            uint16_t first = highlighted > 5 ? highlighted - 5 : 0;
+            uint16_t last = first + 8;
+            if (last > count) last = count;
+            for (uint16_t i = first; i < last; ++i) {
+                const char *name = sd_cart_name(i);
+                uint8_t len = name ? strlen(name) : 0;
+                if (len > 18) len = 18;
+                _print(name, len, 8, 24 + (i - first) * 8,
+                       i == highlighted ? 9 : 7);
+            }
+            _print("A:PLAY  B:EXIT", 14, 8, 112, 7);
+            changed = false;
+        }
+        if (count && buttons_frame[BTN_IDX_A]) return highlighted;
+        if (buttons_frame[BTN_IDX_B]) return -1;
+        flip();
+    }
+    return -1;
+}
+#endif
+
 int pico8() {
     bootup_time = now();
     if( !init_video() )
@@ -93,7 +143,19 @@ int pico8() {
 
 
     //int16_t game = 0; // FIXME drawMenu();
-    int16_t game = drawMenu();
+    const GameCart *active_cart = nullptr;
+#if defined(ESP_BACKEND)
+    if (sd_selected_cart) {
+        active_cart = sd_selected_cart;
+        printf("Booting SD cart %s\n", active_cart->name);
+    }
+#endif
+    int16_t game = active_cart ? 0 :
+#if defined(ESP_BACKEND)
+        drawSdMenu();
+#else
+        drawMenu();
+#endif
     if (game < 0) {
         video_close();
         return 1;
@@ -103,11 +165,21 @@ int pico8() {
     delay(10);
 
     bootup_time = now();
-    printf("Parsing cart %s\n", carts[game].name);
-    cartParser(&carts[game]);
+#if defined(ESP_BACKEND)
+    if (!active_cart && sd_cart_count()) {
+        if (!sd_cart_load_index(game)) {
+            video_close();
+            return 1;
+        }
+        active_cart = sd_selected_cart;
+    }
+#endif
+    if (!active_cart) active_cart = &carts[game];
+    printf("Parsing cart %s\n", active_cart->name);
+    cartParser(active_cart);
 
     printf("init lua \n");
-    bool lua_ok = init_lua(carts[game].code, carts[game].code_len);
+    bool lua_ok = init_lua(active_cart->code, active_cart->code_len);
     printf("init done \n");
 	if ( !lua_ok ) {
 		printf( "Failed to initialize LUA!\n" );

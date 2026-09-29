@@ -9,10 +9,11 @@
 #include "data.h"
 #include "engine.c"
 #include "esp_timer.h"
+#if !CONFIG_BLUETOOTH_GAMEPAD
 #include "esp_wifi.h"
+#endif
 #include "esp_event.h"
 #include "esp_netif.h"
-#include "esp_http_server.h"
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "driver/uart.h"
@@ -49,8 +50,6 @@ static const i2s_pin_config_t i2s_pin_config = {
 
 static uint8_t backbuffer[CONFIG_WIDTH*CONFIG_HEIGHT*2];
 static uint8_t scaled_line[240 * 2];
-extern const uint8_t _binary_splore565_bin_start[];
-extern const uint8_t _binary_splore565_bin_end[];
 static QueueHandle_t q;
 static QueueHandle_t i2s_event_queue;
 uint8_t FLAG = 1;
@@ -65,13 +64,10 @@ uint32_t now();
 uint8_t current_hour();
 uint8_t current_minute();
 static bool wifi_connected;
-static bool web_server_running;
 static bool wifi_setup_ap;
-static httpd_handle_t web_server;
 static char wifi_ssid[33];
 static char wifi_password[65];
 static char wifi_ip[16] = "offline";
-static void start_web_server(void);
 
 static void copy_cstr(char *dst, size_t dst_len, const char *src) {
     size_t len = strlen(src);
@@ -156,6 +152,7 @@ bool init_platform() {
     return true;
 }
 
+#if !CONFIG_BLUETOOTH_GAMEPAD
 static void init_wifi(void) {
     copy_cstr(wifi_ssid, sizeof(wifi_ssid), CONFIG_WIFI_SSID);
     copy_cstr(wifi_password, sizeof(wifi_password), CONFIG_WIFI_PASSWORD);
@@ -195,7 +192,6 @@ static void init_wifi(void) {
         wifi_setup_ap = true;
         copy_cstr(wifi_ip, sizeof(wifi_ip), "192.168.4.1");
         printf("WiFi setup AP active: PicoPico-Setup / picopico8\n");
-        start_web_server();
         return;
     }
 
@@ -227,9 +223,9 @@ static void init_wifi(void) {
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &station));
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_ERROR_CHECK(esp_wifi_connect());
-    start_web_server();
     printf("WiFi station starting for SSID '%s'\n", wifi_ssid);
 }
+#endif
 
 static void status_glyph(char c, uint8_t rows[7]) {
     memset(rows, 0, 7);
@@ -283,83 +279,6 @@ static void keyboard_press(uint8_t button) {
     keyboard_buttons_until[button] = now() + 180;
 }
 
-static esp_err_t web_index(httpd_req_t *req) {
-    const char *page =
-        "<!doctype html><meta name='viewport' content='width=device-width'>"
-        "<title>PicoPico CYD</title><h1>PicoPico CYD</h1>"
-        "<p>WiFi: <b id='s'>loading</b></p>"
-        "<form method='post' action='/config'>"
-        "<label>SSID <input name='ssid' maxlength='32'></label><br>"
-        "<label>Password <input name='password' type='password' maxlength='64'></label><br>"
-        "<button>Save and reconnect</button></form>"
-        "<script>fetch('/status').then(r=>r.json()).then(x=>s.textContent=x.wifi?'connected':'offline')</script>";
-    httpd_resp_set_type(req, "text/html");
-    return httpd_resp_send(req, page, HTTPD_RESP_USE_STRLEN);
-}
-
-static esp_err_t web_status(httpd_req_t *req) {
-    char status[96];
-    snprintf(status, sizeof(status), "{\"wifi\":%s,\"server\":true,\"setup\":%s}",
-             wifi_connected ? "true" : "false",
-             wifi_setup_ap ? "true" : "false");
-    httpd_resp_set_type(req, "application/json");
-    return httpd_resp_send(req, status, HTTPD_RESP_USE_STRLEN);
-}
-
-static void form_value(const char *body, const char *key, char *out, size_t out_len) {
-    char needle[24];
-    snprintf(needle, sizeof(needle), "%s=", key);
-    const char *start = strstr(body, needle);
-    if (!start) { out[0] = '\0'; return; }
-    start += strlen(needle);
-    size_t i = 0;
-    while (start[i] && start[i] != '&' && i + 1 < out_len) {
-        out[i] = start[i] == '+' ? ' ' : start[i];
-        i++;
-    }
-    out[i] = '\0';
-}
-
-static esp_err_t web_config(httpd_req_t *req) {
-    char body[256] = {0};
-    int received = httpd_req_recv(req, body, sizeof(body) - 1);
-    if (received <= 0)
-        return ESP_FAIL;
-    body[received] = '\0';
-
-    char new_ssid[33], new_password[65];
-    form_value(body, "ssid", new_ssid, sizeof(new_ssid));
-    form_value(body, "password", new_password, sizeof(new_password));
-    if (new_ssid[0]) {
-        copy_cstr(wifi_ssid, sizeof(wifi_ssid), new_ssid);
-        copy_cstr(wifi_password, sizeof(wifi_password), new_password);
-        nvs_handle_t nvs;
-        if (nvs_open("picopico", NVS_READWRITE, &nvs) == ESP_OK) {
-            nvs_set_str(nvs, "ssid", wifi_ssid);
-            nvs_set_str(nvs, "password", wifi_password);
-            nvs_commit(nvs);
-            nvs_close(nvs);
-        }
-        printf("WiFi settings saved; reboot to apply\n");
-    }
-    httpd_resp_set_type(req, "text/html");
-    return httpd_resp_sendstr(req, "Saved. Reboot the device to reconnect with the new settings.");
-}
-
-static void start_web_server(void) {
-    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    if (httpd_start(&web_server, &config) != ESP_OK)
-        return;
-    httpd_uri_t root = {.uri = "/", .method = HTTP_GET, .handler = web_index, .user_ctx = NULL};
-    httpd_uri_t status = {.uri = "/status", .method = HTTP_GET, .handler = web_status, .user_ctx = NULL};
-    httpd_uri_t config_uri = {.uri = "/config", .method = HTTP_POST, .handler = web_config, .user_ctx = NULL};
-    httpd_register_uri_handler(web_server, &root);
-    httpd_register_uri_handler(web_server, &status);
-    httpd_register_uri_handler(web_server, &config_uri);
-    web_server_running = true;
-    printf("WiFi configuration server listening on port 80\n");
-}
-
 static void sidebar_digit(uint16_t x, uint16_t y, uint8_t digit, uint16_t color) {
     static const uint8_t segments[10] = {
         0x3f, 0x06, 0x5b, 0x4f, 0x66,
@@ -384,9 +303,9 @@ static void draw_sidebar(void) {
 
     lcdDrawFillRect(&dev, 0, 256, 239, 319, 0x18e3);
     lcdDrawFillRect(&dev, 8, 264, 23, 279, wifi_connected ? 0x07e0 : 0xf800);
-    lcdDrawFillRect(&dev, 32, 264, 47, 279, web_server_running ? 0x07e0 : 0xf800);
+    lcdDrawFillRect(&dev, 32, 264, 47, 279, wifi_connected ? 0x07e0 : 0xf800);
     status_text(8, 286, "WIFI", 0xffff);
-    status_text(42, 286, "WEB", 0xffff);
+    status_text(42, 286, "NET", 0xffff);
     status_text(8, 296, "SSID", 0xffff);
     status_text(42, 296, wifi_ssid[0] ? wifi_ssid : "NONE", 0xffff);
     status_text(8, 306, "IP", 0xffff);
@@ -461,27 +380,6 @@ bool init_audio() {
 
 void draw_hud() {
     // The full logical framebuffer is scaled by put_buffer().
-}
-
-void show_splore_stand_in(void) {
-    // The source image is 160x205. Scale it to 240x308, leaving the final
-    // 12 rows black; this preserves the mockup's aspect ratio on the CYD.
-    const uint8_t *pixels = _binary_splore565_bin_start;
-    const uint16_t out_w = 240;
-    const uint16_t out_h = 308;
-    for (uint16_t y = 0; y < out_h; y++) {
-        uint16_t sy = (uint32_t)y * 205 / out_h;
-        for (uint16_t x = 0; x < out_w; x++) {
-            uint16_t sx = (uint32_t)x * 160 / out_w;
-            const uint8_t *src = pixels + ((uint32_t)sy * 160 + sx) * 2;
-            scaled_line[x * 2] = src[0];
-            scaled_line[x * 2 + 1] = src[1];
-        }
-        lcdSetWindowRect(&dev, 0, y + 6, 239, y + 6);
-        send_buffer(&dev, scaled_line, sizeof(scaled_line));
-    }
-    lcdDrawFillRect(&dev, 0, 0, 239, 5, 0x0000);
-    lcdDrawFillRect(&dev, 0, 314, 239, 319, 0x0000);
 }
 
 bool init_video() {
@@ -617,6 +515,9 @@ uint8_t current_minute() {
     return timeinfo->tm_min;
 }
 uint8_t wifi_strength() {
+#if CONFIG_BLUETOOTH_GAMEPAD
+    return 0;
+#else
     // arbitrary 0-3 scale (limited sprites)
     // 0 = off, 1=low, 2=med, 3 = high
     wifi_ap_record_t ap;
@@ -631,6 +532,7 @@ uint8_t wifi_strength() {
     if (ap.rssi > -10) return 3;
     if (ap.rssi > -30) return 2;
     return 1;
+#endif
 }
 uint8_t battery_left() {
     // arbitrary 0-3 scale

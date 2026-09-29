@@ -1,7 +1,37 @@
 menu "PicoPico Configuration"
+	config SD_CARD
+		bool "Load .p8 cartridges from SD card"
+		default y
+
+	config SD_BOOT_CART
+		string "SD boot cartridge"
+		default "star_splore.p8"
+
+	config SD_CS
+		int "SD card CS GPIO"
+		default 5
+
+	config SD_MOSI
+		int "SD card MOSI GPIO"
+		default 23
+
+	config SD_MISO
+		int "SD card MISO GPIO"
+		default 19
+
+	config SD_SCLK
+		int "SD card SCLK GPIO"
+		default 18
+
 	config BLUETOOTH_GAMEPAD
 		bool "Generic Bluetooth Classic HID gamepad"
 		default n
+		select BT_ENABLED
+		select BT_BLUEDROID_ENABLED
+		select BT_CONTROLLER_ENABLED
+		select BT_CLASSIC_ENABLED
+		select BT_HID_ENABLED
+		select BT_HID_HOST_ENABLED
 		help
 			Enable the generic Bluetooth HID host. This consumes substantial
 			internal DRAM on the original ESP32; leave disabled until the

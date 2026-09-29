@@ -2,35 +2,12 @@
 #define DATA
 #include <assert.h>
 #include <stdint.h>
+#include "cart.h"
 // The memory used by Lua is entirely separate from the PICO-8 memory and is limited to 2 MiB. 
 // this does not include the "General use / extended map" 32KB chunk
 static uint8_t ram[0x5DFF - 0x4300]; // 7KB
 typedef uint8_t  palidx_t;
 typedef uint16_t color_t;
-struct GameCart {
-    const uint8_t  name_len;
-    const char*    name;
-
-    const uint16_t code_len;
-    const uint8_t* code;
-
-    const uint16_t gff_len;
-    const uint8_t* gff;
-
-    const uint16_t gfx_len;
-    const uint8_t* gfx;
-
-    const uint16_t sfx_len;
-    const uint8_t* sfx;
-
-    const uint16_t map_len;
-    const uint8_t* map;
-
-    const uint16_t label_len;
-    const uint8_t* label;
-};
-
-typedef struct GameCart GameCart;
 #include "generated/static_game_data.h"
 #define SAMPLE_RATE 22050
 uint8_t buttons[6] = 	{0, 0, 0, 0, 0, 0};
@@ -126,4 +103,3 @@ static const color_t original_palette[] = {
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 #endif
-

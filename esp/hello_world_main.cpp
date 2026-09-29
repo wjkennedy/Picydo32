@@ -32,6 +32,7 @@
 extern "C" {
     //#include "st7789.h"
     #include "ili9340.h"
+    #include "sd_cart.h"
     void app_main(void);
 #if CONFIG_BLUETOOTH_GAMEPAD
     bool bluetooth_gamepad_init(void);
@@ -43,10 +44,11 @@ TFT_t dev;
 #include "main.cpp"
 
 void _main(void *pvParameters) {
-    show_splore_stand_in();
-    while (true)
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    pico8();
+    if (!sd_cart_scan())
+        printf("SD cart unavailable; browser will remain available\n");
+    int result = pico8();
+    printf("Pico8 task stopped (%d); deleting task\n", result);
+    vTaskDelete(NULL);
 }
 void app_main(void)
 {
@@ -58,7 +60,9 @@ void app_main(void)
 #if CONFIG_BLUETOOTH_GAMEPAD
     bluetooth_gamepad_init();
 #endif
+#if !CONFIG_BLUETOOTH_GAMEPAD
     init_wifi();
+#endif
 
     /* Print chip information */
     esp_chip_info_t chip_info;
@@ -78,7 +82,7 @@ void app_main(void)
 
     printf("Minimum free heap size: %d bytes\n", esp_get_minimum_free_heap_size());
     q = xQueueCreate(1, sizeof(uint8_t));
-	xTaskCreate(_main, "main", 1024*6, NULL, 2, NULL);
+    xTaskCreate(_main, "main", 1024*8, NULL, 2, NULL);
 	xTaskCreatePinnedToCore(put_buffer, "put_buffer", 1024*6, NULL, 2, NULL, 1);
 
 }

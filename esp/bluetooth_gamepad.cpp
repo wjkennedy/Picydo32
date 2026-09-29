@@ -88,6 +88,9 @@ static void bt_gap_event(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *p)
         if (!bt_candidate_valid) {
             memcpy(bt_candidate, p->disc_res.bda, sizeof(bt_candidate));
             bt_candidate_valid = true;
+            printf("BT device discovered: %02x:%02x:%02x:%02x:%02x:%02x\n",
+                   p->disc_res.bda[0], p->disc_res.bda[1], p->disc_res.bda[2],
+                   p->disc_res.bda[3], p->disc_res.bda[4], p->disc_res.bda[5]);
         }
     } else if (event == ESP_BT_GAP_DISC_STATE_CHANGED_EVT &&
                p->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STOPPED &&
@@ -98,7 +101,11 @@ static void bt_gap_event(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *p)
         esp_bt_pin_code_t pin = {'1', '2', '3', '4'};
         esp_bt_gap_pin_reply(p->pin_req.bda, true, 4, pin);
     } else if (event == ESP_BT_GAP_CFM_REQ_EVT) {
+        printf("BT confirmation request; accepting\n");
         esp_bt_gap_ssp_confirm_reply(p->cfm_req.bda, true);
+    } else if (event == ESP_BT_GAP_AUTH_CMPL_EVT) {
+        printf("BT authentication %s\n",
+               p->auth_cmpl.stat == ESP_BT_STATUS_SUCCESS ? "complete" : "failed");
     }
 }
 
@@ -127,7 +134,12 @@ extern "C" bool bluetooth_gamepad_init(void)
     err = esp_bluedroid_enable();
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) { printf("Bluedroid enable: %s\n", esp_err_to_name(err)); return false; }
     ESP_ERROR_CHECK(esp_bt_gap_register_callback(bt_gap_event));
-    ESP_ERROR_CHECK(esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_NON_DISCOVERABLE));
+    esp_bt_io_cap_t io_cap = ESP_BT_IO_CAP_NONE;
+    ESP_ERROR_CHECK(esp_bt_gap_set_security_param(ESP_BT_SP_IOCAP_MODE,
+                                                   &io_cap, sizeof(io_cap)));
+    esp_bt_pin_code_t pin = {'1', '2', '3', '4'};
+    ESP_ERROR_CHECK(esp_bt_gap_set_pin(ESP_BT_PIN_TYPE_FIXED, 4, pin));
+    ESP_ERROR_CHECK(esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE));
     esp_hidh_config_t hidh = { .callback = bt_hid_event, .event_stack_size = 4096, .callback_arg = NULL };
     ESP_ERROR_CHECK(esp_hidh_init(&hidh));
     xTaskCreate(bt_scan_task, "bt_scan", 4096, NULL, 2, NULL);
